@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx",
+    "paths": {
+      "@/server/*": [
+        "./src/*"
+      ],
+      "@/server/packages/*": [
+        "../../packages/src/*"
+      ],
+    },
+  },
+  "include": [
+    "./src",
+    "../../packages/src",
+  ],
+}

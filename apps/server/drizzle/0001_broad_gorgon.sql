@@ -1,0 +1,1 @@
+ALTER TABLE "users" ALTER COLUMN "birth_day" SET DATA TYPE varchar(10);

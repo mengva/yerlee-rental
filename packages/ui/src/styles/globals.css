@@ -2,6 +2,8 @@
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../../../components/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
+@source "../../node_modules/@uploadthing/react/dist";
+@source "../../packages/ui/src"; /* Yog koj siv Shadcn hauv packages */
 
 @import "tw-animate-css";
 

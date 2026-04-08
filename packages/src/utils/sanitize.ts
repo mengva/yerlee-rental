@@ -1,0 +1,54 @@
+export class SecureSanitizeServices {
+    private static isValidDateString(str: string): boolean {
+        const date = new Date(str);
+        return !isNaN(date.getTime());
+    }
+
+    public static sanitizeString(str: string): string {
+        if (typeof str !== 'string') return '';
+        return str
+            .trim()
+            .replace(/[<><>'"&]/g, '') // Remove potential XSS chars
+    }
+
+    public static sanitizeOnlyArray(arr: string[]): string[] {
+        if (!Array.isArray(arr)) return [];
+        return arr
+            .filter(item => typeof item === 'string' && item.trim().length > 0)
+            .map(item => this.sanitizeString(item))
+    }
+
+    public static sanitizeObject(data: any): any {
+        if (!data) return '';
+
+        const keys: string[] = Object.keys(data);
+        const imageFileKeys: string[] = ["fileName", "fileType", "fileData", "size"];
+        const isValidImageFile = Boolean(keys && keys.length && imageFileKeys.every(key => imageFileKeys.includes(key)) && keys.length === imageFileKeys.length);
+
+        if (isValidImageFile) {
+            return data;
+        }
+
+        if (Array.isArray(data) && data.length) {
+            return data.map(item => this.sanitizeObject(item));
+        }
+
+        if (typeof data === 'object' && Object.keys(data).length) {
+            for (const key in data) {
+                if (Object.prototype.hasOwnProperty.call(data, key)) {
+                    data[key] = this.sanitizeObject(data[key]);
+                }
+            }
+            return data;
+        }
+
+        if (typeof data === "string") {
+            // Check if it's a valid date string
+            const str = this.sanitizeString(data);
+            // if (!str) throw new Error("Not allowed");
+            return str || '';
+        }
+
+        return data;
+    }
+}

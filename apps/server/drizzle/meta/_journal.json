@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1775189208167,
+      "tag": "0000_yielding_fixer",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775215059864,
+      "tag": "0001_broad_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1775315582584,
+      "tag": "0002_futuristic_maginty",
+      "breakpoints": true
+    }
+  ]
+}
