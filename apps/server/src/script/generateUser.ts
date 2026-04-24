@@ -1,6 +1,6 @@
 import { zodValidationSignUp } from "@/server/packages/validations";
 import db from "../config/db";
-import { users } from "../db";
+import { userCredentials, users } from "../db";
 import { Helper } from "../utils";
 import { ErrorHandler } from "@/server/packages/utils";
 
@@ -41,15 +41,24 @@ export const generateUser = async () => {
             return;
         }
 
-        await db.insert(users).values({
+        const [newUser] = await db.insert(users).values({
             firstName: validationUserInfo.firstName,
             lastName: validationUserInfo.lastName,
             email: validationUserInfo.email,
-            password: hashedPassword,
             gender: validationUserInfo.gender,
             birthDay: validationUserInfo.birthDay,
             phoneNumber: validationUserInfo.phoneNumber,
             role: "owner",
+        }).returning();
+
+        if(!newUser) {
+            console.error("Failed to create new user.");
+            return;
+        }
+
+        await db.insert(userCredentials).values({
+            passwordHash: hashedPassword,
+            userId: newUser.id,
         }).onConflictDoNothing().execute();
 
         console.log("User generated successfully.");

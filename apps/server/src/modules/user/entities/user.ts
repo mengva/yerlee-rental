@@ -10,6 +10,8 @@ export const users = pgTable("users", {
     lastName: varchar("last_name", { length: 150 }).notNull(),
     phoneNumber: varchar("phone_number", { length: 20 }).unique(),
     email: varchar("email", { length: 100 }).unique(),
+    gender: varchar("gender", { length: 20 }),
+    birthDay: varchar("birth_day", { length: 20 }),
     role: userRoleEnum("role").notNull().default("customer"),
     isActive: boolean("is_active").default(true).notNull(),
     userAgent: varchar("user_agent", { length: 255 }),
