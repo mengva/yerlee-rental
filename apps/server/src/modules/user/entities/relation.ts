@@ -1,27 +1,24 @@
 import { relations } from "drizzle-orm";
-import { userBackgroundImages, userImages, users } from "./user";
+import { userCredentials, images, users } from "./user";
 
-export const userRelations = relations(users, ({ one }) => ({
-    image: one(userImages, {
+export const usersRelations = relations(users, ({ one, many }) => ({
+    credentials: one(userCredentials, {
         fields: [users.id],
-        references: [userImages.userId],
+        references: [userCredentials.userId],
     }),
-    backgroundImage: one(userImages, {
-        fields: [users.id],
-        references: [userImages.userId],
+    images: many(images),
+}));
+
+export const userCredentialsRelations = relations(userCredentials, ({ one }) => ({
+    user: one(users, {
+        fields: [userCredentials.userId],
+        references: [users.id],
     }),
 }));
 
-export const userImageRelations = relations(userImages, ({ one }) => ({
+export const imagesRelations = relations(images, ({ one }) => ({
     user: one(users, {
-        fields: [userImages.userId],
+        fields: [images.userId],
         references: [users.id],
-    })
-}));
-
-export const userBackgroundImageRelations = relations(userBackgroundImages, ({ one }) => ({
-    user: one(users, {
-        fields: [userBackgroundImages.userId],
-        references: [users.id],
-    })
+    }),
 }));

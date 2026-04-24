@@ -8,7 +8,7 @@ import { redis } from "@/server/lib/redis";
 import { MailServices } from "@/server/lib/mail";
 import { UserRoleDto } from "@/server/packages/types";
 import { HandlerSuccess, Helper } from "@/server/utils";
-import { users } from "../../entities";
+import { userCredentials, users } from "../../entities";
 
 interface SignInResponseDto {
     token: string;
@@ -36,7 +36,10 @@ export class tRPCAuthServices {
                 where: (users, { eq, and }) => and(
                     eq(users.email, info.email),
                     eq(users.isActive, true)
-                )
+                ),
+                with: {
+                    credentials: true
+                }
             });
 
             // 3. Check if user exists
@@ -47,8 +50,11 @@ export class tRPCAuthServices {
                 });
             }
 
+            const DUMMY_HASH = "$2b$10$invalidhashfortimingprotection00000000000000000000000";
+            const passwordHash = userInfo.credentials?.passwordHash ?? DUMMY_HASH;
+
             // 4. Verify password with bcrypt
-            const match = await Helper.bcryptCompare(info.password, userInfo.password);
+            const match = await Helper.bcryptCompare(info.password, passwordHash);
             if (!match) {
                 throw new TRPCError({
                     code: "UNAUTHORIZED",
@@ -56,30 +62,27 @@ export class tRPCAuthServices {
                 });
             }
 
-            return await db.transaction(async (tx) => {
-                // 5. Update the latest userAgent in the database
-                // This ensures the DB stays synced with the current device
-                await tx.update(users)
-                    .set({ userAgent: userAgent })
-                    .where(eq(users.id, userInfo.id));
+            // 5. Update the latest userAgent in the database
+            // This ensures the DB stays synced with the current device
+            await db.update(users)
+                .set({ userAgent: userAgent })
+                .where(eq(users.id, userInfo.id));
 
-                // 6. Prepare JWT Payload
-                const userPayload = {
-                    userId: userInfo.id,
-                    role: userInfo.role as UserRoleDto,
-                    userAgent: userAgent,
-                    exp: Helper.tokenExpriresIn, // Token expires in 30 days
-                };
+            // 6. Prepare JWT Payload
+            const userPayload = {
+                userId: userInfo.id,
+                role: userInfo.role as UserRoleDto,
+                userAgent: userAgent,
+                exp: Helper.tokenExpriresIn, // Token expires in 30 days
+            };
 
-                // 7. Generate and set access token in cookies
-                const token = await Helper.generateToken(userPayload);
+            // 7. Generate and set access token in cookies
+            const token = await Helper.generateToken(userPayload);
 
-                return {
-                    token,
-                    role: userInfo.role as UserRoleDto,
-                }
-
-            });
+            return {
+                token,
+                role: userInfo.role as UserRoleDto,
+            }
         } catch (error) {
             throw ErrorHandler.getErrorMessage(error);
         }
@@ -244,7 +247,6 @@ export class tRPCAuthServices {
         }
     }
 
-
     public static async generateCodeResetPassword(email: string) {
         try {
             // 2. Generate a 6-digit random code
@@ -321,7 +323,7 @@ export class tRPCAuthServices {
 
             // 2. Reset Password (Verify)
             const reset_token = ctx.getCookie("reset_token");
-            const emailFromRedis = await redis.get(`reset_session:${reset_token}`);
+            const emailFromRedis = await redis.get(`reset_session:${reset_token}`) as string || "unknown" || null;
 
             if (!emailFromRedis) {
                 throw new TRPCError({ code: "UNAUTHORIZED", message: "Session expired" });
@@ -344,7 +346,7 @@ export class tRPCAuthServices {
             const resetToken = ctx.getCookie("reset_token");
 
             // 3. Look up the associated email from Redis using the token
-            const email = await redis.get(`reset_session:${resetToken}`);
+            const email = await redis.get(`reset_session:${resetToken}`) as string || null;
 
             if (!email) {
                 throw new TRPCError({
@@ -354,7 +356,7 @@ export class tRPCAuthServices {
             }
 
             // 4. Verify the OTP (One-Time Password) from Redis
-            const storedCode = await redis.get(`reset_password:${email}`);
+            const storedCode = await redis.get(`reset_password:${email}`) as string || null;
 
             if (!storedCode || storedCode !== code) {
                 throw new TRPCError({
@@ -368,9 +370,9 @@ export class tRPCAuthServices {
 
             return await db.transaction(async (tx) => {
                 // 6. Update the user's password in the database
-                await tx.update(users)
-                    .set({ password: hashedPassword })
-                    .where(eq(users.email, email as string));
+                await tx.update(userCredentials)
+                    .set({ passwordHash: hashedPassword })
+                    .where(eq(userCredentials.userId, ctx.userInfo?.userId));
 
                 // 7. Cleanup: Delete session and OTP data from Redis to prevent reuse
                 await redis.del(`reset_password:${email as string}`);

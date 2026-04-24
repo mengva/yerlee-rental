@@ -2,8 +2,8 @@ import localFont from "next/font/local";
 import "@workspace/ui/globals.css"
 import { Providers } from "@/components/providers"
 import { ThemeProvider } from "next-themes";
-import { TRPCProvider } from "./trpc/Provider";
 import { Toaster } from "react-hot-toast";
+import { TRPCProvider } from "./trpc";
 
 const customizeFont = localFont({
   src: "../../../packages/src/fonts/Phetsarath_OT.ttf",

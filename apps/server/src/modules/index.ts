@@ -1,0 +1,522 @@
+// =========================================================
+// ລະບົບຈັດການຫ້ອງແຖວ - Apartment Management System
+// Drizzle ORM Schema — Updated to match your existing pattern
+// =========================================================
+
+import {
+  pgTable,
+  pgEnum,
+  uuid,
+  varchar,
+  text,
+  integer,
+  numeric,
+  date,
+  timestamp,
+  boolean,
+  index,
+  unique,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
+
+// =========================================================
+// ENUMS
+// =========================================================
+
+export const userRoleEnum = pgEnum("user_role", [
+  "Staff",
+  "RoomOwner",
+  "Customer",
+]);
+
+export const membershipTypeEnum = pgEnum("membership_type", [
+  "Regular",
+  "VIP",
+]);
+
+export const imageTypeEnum = pgEnum("image_type", [
+  "profile",
+  "cover",
+  "room",
+  "document",
+  "contract",
+]);
+
+export const roomStatusEnum = pgEnum("room_status", [
+  "Available",    // ຫວ່າງ
+  "Reserved",     // ຈອງແລ້ວ
+  "Rented",       // ເຊົ່າແລ້ວ
+  "Maintenance",  // ສ້ອມແປງ
+  "Unavailable",  // ບໍ່ພ້ອມ
+]);
+
+export const bookingStatusEnum = pgEnum("booking_status", [
+  "Pending",    // ລໍຖ້າ
+  "Confirmed",  // ຢືນຢັນແລ້ວ
+  "Cancelled",  // ຍົກເລີກ
+  "Converted",  // ປ່ຽນເປັນສັນຍາ
+]);
+
+export const contractStatusEnum = pgEnum("contract_status", [
+  "Active",      // ກຳລັງໃຊ້
+  "Expired",     // ໝົດອາຍຸ
+  "Terminated",  // ຍົກເລີກກ່ອນກຳນົດ
+]);
+
+export const paymentTypeEnum = pgEnum("payment_type", [
+  "BookingFee",   // ຄ່າຈອງ
+  "Rent",         // ຄ່າເຊົ່າ
+  "Deposit",      // ຄ່າມັດຈຳ
+  "Utility",      // ຄ່ານໍ້າ-ໄຟ
+  "Other",
+]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "Paid",     // ຊຳລະແລ້ວ
+  "Unpaid",   // ຍັງບໍ່ຊຳລະ
+  "Partial",  // ຊຳລະບາງສ່ວນ
+]);
+
+export const paymentMethodEnum = pgEnum("payment_method", [
+  "Cash",         // ເງິນສົດ
+  "BankTransfer", // ໂອນເງິນ
+  "QRCode",       // QR ໂຄດ
+]);
+
+// =========================================================
+// 1. BASE USER TABLES (your existing pattern)
+// =========================================================
+
+export const users = pgTable("users", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fullName: varchar("full_name", { length: 150 }).notNull(),
+  phoneNumber: varchar("phone_number", { length: 20 }).unique(),
+  email: varchar("email", { length: 100 }).unique(),
+  gender: varchar("gender", { length: 10 }).notNull(),
+  role: userRoleEnum("role").notNull().default("Customer"),
+  isActive: boolean("is_active").default(true).notNull(),
+  userAgent: varchar("user_agent", { length: 255 }),
+  ipAddress: varchar("ip_address", { length: 50 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("users_phone_idx").on(table.phoneNumber),
+  index("users_email_idx").on(table.email),
+  index("users_role_idx").on(table.role),
+]);
+
+export const userCredentials = pgTable("user_credentials", {
+  userId: uuid("user_id").primaryKey().notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const images = pgTable("images", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  imageKey: text("image_key").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  size: integer("size").notNull(),
+  type: imageTypeEnum("type").default("profile").notNull(),
+  isPrimary: boolean("is_primary").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("images_user_id_idx").on(table.userId),
+  index("images_room_id_idx").on(table.roomId),
+  index("images_type_idx").on(table.type),
+  index("images_is_primary_idx").on(table.isPrimary),
+]);
+
+// ==================== Role Extension Tables ====================
+
+export const roomOwners = pgTable("room_owners", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  companyName: varchar("company_name", { length: 150 }),
+  address: text("address"),
+  bankAccountName: varchar("bank_account_name", { length: 150 }),
+  bankAccountNumber: varchar("bank_account_number", { length: 50 }),
+  bankName: varchar("bank_name", { length: 100 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("room_owners_company_idx").on(table.companyName),
+]);
+
+export const staffs = pgTable("staffs", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  salary: numeric("salary", { precision: 10, scale: 2 }),
+  position: varchar("position", { length: 100 }),
+  hireDate: date("hire_date"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const customers = pgTable("customers", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  membershipType: membershipTypeEnum("membership_type").default("Regular"),
+  dateOfBirth: date("date_of_birth"),
+  address: text("address"),
+  emergencyContact: varchar("emergency_contact", { length: 150 }),
+  emergencyPhone: varchar("emergency_phone", { length: 20 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("customers_membership_idx").on(table.membershipType),
+]);
+
+// =========================================================
+// 2. ROOM TABLES
+// =========================================================
+
+export const roomTypes = pgTable("room_types", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  baseRentPrice: numeric("base_rent_price", { precision: 12, scale: 2 }).notNull(),
+  depositMonths: integer("deposit_months").default(2),  // ຄ່າມັດຈຳ = N ເດືອນ
+  maxOccupants: integer("max_occupants").default(1),
+  areaSqm: numeric("area_sqm", { precision: 6, scale: 2 }),
+  amenities: text("amenities"),  // JSON string of features
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+});
+
+export const rooms = pgTable("rooms", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+  roomTypeId: uuid("room_type_id").references(() => roomTypes.id, { onDelete: "cascade" }).notNull(),
+  roomNumber: varchar("room_number", { length: 20 }).notNull().unique(),
+  floor: integer("floor"),
+  building: varchar("building", { length: 50 }),
+  rentPrice: numeric("rent_price", { precision: 12, scale: 2 }).notNull(),
+  depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }),
+  electricityRate: numeric("electricity_rate", { precision: 8, scale: 2 }),
+  waterRate: numeric("water_rate", { precision: 8, scale: 2 }),
+  status: roomStatusEnum("status").default("Available").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("rooms_owner_idx").on(table.ownerUserId),
+  index("rooms_type_idx").on(table.roomTypeId),
+  index("rooms_status_idx").on(table.status),
+]);
+
+// =========================================================
+// 3. SERVICES
+// =========================================================
+
+// ຈອງຫ້ອງ - Booking
+export const bookings = pgTable("bookings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingCode: varchar("booking_code", { length: 30 }).notNull().unique(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  bookingDate: date("booking_date").notNull(),
+  expectedCheckIn: date("expected_check_in").notNull(),
+  bookingFee: numeric("booking_fee", { precision: 12, scale: 2 }),
+  status: bookingStatusEnum("status").default("Pending").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("bookings_customer_idx").on(table.customerUserId),
+  index("bookings_staff_idx").on(table.staffUserId),
+  index("bookings_room_idx").on(table.roomId),
+  index("bookings_status_idx").on(table.status),
+]);
+
+// ສັນຍາເຊົ່າ - Rental Contract
+export const contracts = pgTable("contracts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractCode: varchar("contract_code", { length: 30 }).notNull().unique(),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "cascade" }),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date").notNull(),
+  rentPrice: numeric("rent_price", { precision: 12, scale: 2 }).notNull(),
+  depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }),
+  depositPaid: boolean("deposit_paid").default(false).notNull(),
+  numberOfOccupants: integer("number_of_occupants").default(1),
+  status: contractStatusEnum("status").default("Active").notNull(),
+  terms: text("terms"),
+  witnessName: varchar("witness_name", { length: 150 }),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("contracts_customer_idx").on(table.customerUserId),
+  index("contracts_staff_idx").on(table.staffUserId),
+  index("contracts_room_idx").on(table.roomId),
+  index("contracts_status_idx").on(table.status),
+]);
+
+// ແຈ້ງເຂົ້າ - Check-In
+export const checkIns = pgTable("check_ins", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  checkInDate: timestamp("check_in_date", { withTimezone: true }).notNull(),
+  electricityMeterIn: numeric("electricity_meter_in", { precision: 10, scale: 2 }),
+  waterMeterIn: numeric("water_meter_in", { precision: 10, scale: 2 }),
+  keyReceived: boolean("key_received").default(true).notNull(),
+  roomConditionNote: text("room_condition_note"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("check_ins_contract_idx").on(table.contractId),
+  index("check_ins_room_idx").on(table.roomId),
+  index("check_ins_staff_idx").on(table.staffUserId),
+]);
+
+// ແຈ້ງອອກ - Check-Out
+export const checkOuts = pgTable("check_outs", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  checkOutDate: timestamp("check_out_date", { withTimezone: true }).notNull(),
+  electricityMeterOut: numeric("electricity_meter_out", { precision: 10, scale: 2 }),
+  waterMeterOut: numeric("water_meter_out", { precision: 10, scale: 2 }),
+  keyReturned: boolean("key_returned").default(true).notNull(),
+  damageDeduction: numeric("damage_deduction", { precision: 12, scale: 2 }).default("0"),
+  depositRefund: numeric("deposit_refund", { precision: 12, scale: 2 }),
+  roomConditionNote: text("room_condition_note"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("check_outs_contract_idx").on(table.contractId),
+  index("check_outs_room_idx").on(table.roomId),
+  index("check_outs_staff_idx").on(table.staffUserId),
+]);
+
+// ປ່ຽນຫ້ອງ - Room Transfer
+export const roomTransfers = pgTable("room_transfers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  fromRoomId: uuid("from_room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  toRoomId: uuid("to_room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  transferDate: date("transfer_date").notNull(),
+  reason: text("reason"),
+  priceDifference: numeric("price_difference", { precision: 12, scale: 2 }),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("room_transfers_contract_idx").on(table.contractId),
+  index("room_transfers_staff_idx").on(table.staffUserId),
+]);
+
+// =========================================================
+// 4. PAYMENTS
+// =========================================================
+
+export const payments = pgTable("payments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  paymentCode: varchar("payment_code", { length: 30 }).notNull().unique(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "cascade" }).notNull(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+  paymentDate: date("payment_date").notNull(),
+  dueDate: date("due_date"),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).default("0"),
+  paymentStatus: paymentStatusEnum("payment_status").default("Unpaid").notNull(),
+  paymentMethod: paymentMethodEnum("payment_method"),
+  referenceNumber: varchar("reference_number", { length: 100 }),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("payments_customer_idx").on(table.customerUserId),
+  index("payments_staff_idx").on(table.staffUserId),
+  index("payments_contract_idx").on(table.contractId),
+  index("payments_type_idx").on(table.paymentType),
+  index("payments_status_idx").on(table.paymentStatus),
+  index("payments_due_date_idx").on(table.dueDate),
+]);
+
+// ຄ່ານໍ້າ-ໄຟຟ້າ - Utility Bill
+export const utilityBills = pgTable("utility_bills", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  billCode: varchar("bill_code", { length: 30 }).notNull().unique(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
+  staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "set null" }),
+  billingMonth: varchar("billing_month", { length: 7 }).notNull(), // "2025-01"
+  // ໄຟຟ້າ
+  electricityPrevMeter: numeric("electricity_prev_meter", { precision: 10, scale: 2 }),
+  electricityCurrentMeter: numeric("electricity_current_meter", { precision: 10, scale: 2 }),
+  electricityUnitsUsed: numeric("electricity_units_used", { precision: 10, scale: 2 }),
+  electricityRate: numeric("electricity_rate", { precision: 8, scale: 2 }),
+  electricityAmount: numeric("electricity_amount", { precision: 12, scale: 2 }),
+  // ນໍ້າ
+  waterPrevMeter: numeric("water_prev_meter", { precision: 10, scale: 2 }),
+  waterCurrentMeter: numeric("water_current_meter", { precision: 10, scale: 2 }),
+  waterUnitsUsed: numeric("water_units_used", { precision: 10, scale: 2 }),
+  waterRate: numeric("water_rate", { precision: 8, scale: 2 }),
+  waterAmount: numeric("water_amount", { precision: 12, scale: 2 }),
+  // ລວມ
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  dueDate: date("due_date"),
+  paymentStatus: paymentStatusEnum("payment_status").default("Unpaid").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("utility_bills_contract_idx").on(table.contractId),
+  index("utility_bills_room_idx").on(table.roomId),
+  index("utility_bills_month_idx").on(table.billingMonth),
+  index("utility_bills_status_idx").on(table.paymentStatus),
+  // ໜຶ່ງຫ້ອງ ໜຶ່ງເດືອນ ມີໃບບິນດຽວ
+  unique("utility_bills_contract_month_unique").on(table.contractId, table.billingMonth),
+]);
+
+// =========================================================
+// RELATIONS
+// =========================================================
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  credentials: one(userCredentials, { fields: [users.id], references: [userCredentials.userId] }),
+  images: many(images),
+  roomOwner: one(roomOwners, { fields: [users.id], references: [roomOwners.userId] }),
+  staff: one(staffs, { fields: [users.id], references: [staffs.userId] }),
+  customer: one(customers, { fields: [users.id], references: [customers.userId] }),
+  ownedRooms: many(rooms, { relationName: "roomOwner" }),
+  bookingsAsCustomers: many(bookings, { relationName: "bookingCustomers" }),
+  bookingsAsStaffs: many(bookings, { relationName: "bookingStaffs" }),
+  contractsAsCustomers: many(contracts, { relationName: "contractCustomers" }),
+  contractsAsStaffs: many(contracts, { relationName: "contractStaffs" }),
+  paymentsAsCustomers: many(payments, { relationName: "paymentCustomers" }),
+  paymentsAsStaffs: many(payments, { relationName: "paymentStaffs" }),
+}));
+
+export const roomsRelations = relations(rooms, ({ one, many }) => ({
+  owner: one(users, { fields: [rooms.ownerUserId], references: [users.id], relationName: "roomOwner" }),
+  roomType: one(roomTypes, { fields: [rooms.roomTypeId], references: [roomTypes.id] }),
+  images: many(images),
+  bookings: many(bookings),
+  contracts: many(contracts),
+  checkIns: many(checkIns),
+  checkOuts: many(checkOuts),
+  payments: many(payments),
+  utilityBills: many(utilityBills),
+  transfersFrom: many(roomTransfers, { relationName: "transferFrom" }),
+  transfersTo: many(roomTransfers, { relationName: "transferTo" }),
+}));
+
+export const roomTypesRelations = relations(roomTypes, ({ many }) => ({
+  rooms: many(rooms),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one, many }) => ({
+  customer: one(users, { fields: [bookings.customerUserId], references: [users.id], relationName: "bookingCustomer" }),
+  staff: one(users, { fields: [bookings.staffUserId], references: [users.id], relationName: "bookingStaff" }),
+  room: one(rooms, { fields: [bookings.roomId], references: [rooms.id] }),
+  contracts: many(contracts),
+  payments: many(payments),
+}));
+
+export const contractsRelations = relations(contracts, ({ one, many }) => ({
+  booking: one(bookings, { fields: [contracts.bookingId], references: [bookings.id] }),
+  customer: one(users, { fields: [contracts.customerUserId], references: [users.id], relationName: "contractCustomer" }),
+  staff: one(users, { fields: [contracts.staffUserId], references: [users.id], relationName: "contractStaff" }),
+  room: one(rooms, { fields: [contracts.roomId], references: [rooms.id] }),
+  checkIns: many(checkIns),
+  checkOuts: many(checkOuts),
+  payments: many(payments),
+  utilityBills: many(utilityBills),
+  roomTransfers: many(roomTransfers),
+}));
+
+export const checkInsRelations = relations(checkIns, ({ one }) => ({
+  contract: one(contracts, { fields: [checkIns.contractId], references: [contracts.id] }),
+  customer: one(users, { fields: [checkIns.customerUserId], references: [users.id] }),
+  room: one(rooms, { fields: [checkIns.roomId], references: [rooms.id] }),
+  staff: one(users, { fields: [checkIns.staffUserId], references: [users.id] }),
+}));
+
+export const checkOutsRelations = relations(checkOuts, ({ one }) => ({
+  contract: one(contracts, { fields: [checkOuts.contractId], references: [contracts.id] }),
+  customer: one(users, { fields: [checkOuts.customerUserId], references: [users.id] }),
+  room: one(rooms, { fields: [checkOuts.roomId], references: [rooms.id] }),
+  staff: one(users, { fields: [checkOuts.staffUserId], references: [users.id] }),
+}));
+
+export const roomTransfersRelations = relations(roomTransfers, ({ one }) => ({
+  contract: one(contracts, { fields: [roomTransfers.contractId], references: [contracts.id] }),
+  customer: one(users, { fields: [roomTransfers.customerUserId], references: [users.id] }),
+  fromRoom: one(rooms, { fields: [roomTransfers.fromRoomId], references: [rooms.id], relationName: "transferFrom" }),
+  toRoom: one(rooms, { fields: [roomTransfers.toRoomId], references: [rooms.id], relationName: "transferTo" }),
+  staff: one(users, { fields: [roomTransfers.staffUserId], references: [users.id] }),
+}));
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  contract: one(contracts, { fields: [payments.contractId], references: [contracts.id] }),
+  booking: one(bookings, { fields: [payments.bookingId], references: [bookings.id] }),
+  customer: one(users, { fields: [payments.customerUserId], references: [users.id], relationName: "paymentCustomer" }),
+  staff: one(users, { fields: [payments.staffUserId], references: [users.id], relationName: "paymentStaff" }),
+  room: one(rooms, { fields: [payments.roomId], references: [rooms.id] }),
+  utilityBills: many(utilityBills),
+}));
+
+export const utilityBillsRelations = relations(utilityBills, ({ one }) => ({
+  contract: one(contracts, { fields: [utilityBills.contractId], references: [contracts.id] }),
+  customer: one(users, { fields: [utilityBills.customerUserId], references: [users.id] }),
+  room: one(rooms, { fields: [utilityBills.roomId], references: [rooms.id] }),
+  staff: one(users, { fields: [utilityBills.staffUserId], references: [users.id] }),
+  payment: one(payments, { fields: [utilityBills.paymentId], references: [payments.id] }),
+}));
+
+// =========================================================
+// TYPE EXPORTS
+// =========================================================
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type RoomOwner = typeof roomOwners.$inferSelect;
+export type NewRoomOwner = typeof roomOwners.$inferInsert;
+export type Staff = typeof staffs.$inferSelect;
+export type NewStaff = typeof staffs.$inferInsert;
+export type Customer = typeof customers.$inferSelect;
+export type NewCustomer = typeof customers.$inferInsert;
+export type RoomType = typeof roomTypes.$inferSelect;
+export type NewRoomType = typeof roomTypes.$inferInsert;
+export type Room = typeof rooms.$inferSelect;
+export type NewRoom = typeof rooms.$inferInsert;
+export type Booking = typeof bookings.$inferSelect;
+export type NewBooking = typeof bookings.$inferInsert;
+export type Contract = typeof contracts.$inferSelect;
+export type NewContract = typeof contracts.$inferInsert;
+export type CheckIn = typeof checkIns.$inferSelect;
+export type NewCheckIn = typeof checkIns.$inferInsert;
+export type CheckOut = typeof checkOuts.$inferSelect;
+export type NewCheckOut = typeof checkOuts.$inferInsert;
+export type RoomTransfer = typeof roomTransfers.$inferSelect;
+export type NewRoomTransfer = typeof roomTransfers.$inferInsert;
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+export type UtilityBill = typeof utilityBills.$inferSelect;
+export type NewUtilityBill = typeof utilityBills.$inferInsert;

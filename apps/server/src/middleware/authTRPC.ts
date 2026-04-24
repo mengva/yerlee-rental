@@ -6,9 +6,10 @@ import { Helper } from "../utils";
 
 export class tRPCUserAuthMiddleware {
     public static isUserAuth = t.middleware(async ({ ctx, next }) => {
-
         // Determine the token name based on the user's role (staff in this case)
-        const cookieName = Helper.getCookieName(ctx.userInfo.role);
+
+        const userRole = ctx.userInfo?.role || "customer"; // Default to "customer" if role is not available
+        const cookieName = Helper.getCookieName(userRole);
 
         // 1. Get token from cookies
         const token = ctx.getCookie(cookieName);
@@ -28,7 +29,6 @@ export class tRPCUserAuthMiddleware {
             // 3. Security Check: Compare Token's User-Agent with Current Request's User-Agent
             // This prevents Session Hijacking from different browsers/devices
             if (payload.userAgent !== currentUA) {
-                ctx.deleteCookie(cookieName); // Clear the cookie to invalidate the session
                 throw new TRPCError({
                     code: "UNAUTHORIZED",
                     message: "Invalid session: Device mismatch detected. Please login again.",
