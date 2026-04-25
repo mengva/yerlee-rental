@@ -34,7 +34,8 @@ export const userCredentials = pgTable("user_credentials", {
 
 // ==================== 3. User Images ====================
 export const images = pgTable("images", {
-    userId: uuid("user_id").primaryKey().notNull().references(() => users.id, { onDelete: "cascade" }),
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     url: text("url").notNull(),
     imageKey: text("image_key").notNull(),
     width: integer("width"),
@@ -46,5 +47,6 @@ export const images = pgTable("images", {
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 }, (table) => [
     index("images_type_idx").on(table.type),
+    index("images_user_id_idx").on(table.userId),
     index("images_is_primary_idx").on(table.isPrimary),
 ]);

@@ -35,11 +35,11 @@ export const membershipTypeEnum = pgEnum("membership_type", [
 ]);
 
 export const imageTypeEnum = pgEnum("image_type", [
-  "profile",
-  "cover",
-  "room",
-  "document",
-  "contract",
+  "Profile",
+  "Cover",
+  "Room",
+  "Document",
+  "Contract",
 ]);
 
 export const roomStatusEnum = pgEnum("room_status", [
@@ -120,10 +120,10 @@ export const images = pgTable("images", {
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }),
   url: text("url").notNull(),
   imageKey: text("image_key").notNull(),
-  width: integer("width").notNull(),
-  height: integer("height").notNull(),
+  width: integer("width"),
+  height: integer("height"),
   size: integer("size").notNull(),
-  type: imageTypeEnum("type").default("profile").notNull(),
+  type: imageTypeEnum("type").default("Profile").notNull(),
   isPrimary: boolean("is_primary").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
@@ -140,9 +140,6 @@ export const roomOwners = pgTable("room_owners", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   companyName: varchar("company_name", { length: 150 }),
   address: text("address"),
-  bankAccountName: varchar("bank_account_name", { length: 150 }),
-  bankAccountNumber: varchar("bank_account_number", { length: 50 }),
-  bankName: varchar("bank_name", { length: 100 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 }, (table) => [
@@ -153,7 +150,6 @@ export const staffs = pgTable("staffs", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   salary: numeric("salary", { precision: 10, scale: 2 }),
   position: varchar("position", { length: 100 }),
-  hireDate: date("hire_date"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 });
@@ -161,10 +157,7 @@ export const staffs = pgTable("staffs", {
 export const customers = pgTable("customers", {
   userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
   membershipType: membershipTypeEnum("membership_type").default("Regular"),
-  dateOfBirth: date("date_of_birth"),
   address: text("address"),
-  emergencyContact: varchar("emergency_contact", { length: 150 }),
-  emergencyPhone: varchar("emergency_phone", { length: 20 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 }, (table) => [
@@ -195,11 +188,8 @@ export const rooms = pgTable("rooms", {
   roomTypeId: uuid("room_type_id").references(() => roomTypes.id, { onDelete: "cascade" }).notNull(),
   roomNumber: varchar("room_number", { length: 20 }).notNull().unique(),
   floor: integer("floor"),
-  building: varchar("building", { length: 50 }),
   rentPrice: numeric("rent_price", { precision: 12, scale: 2 }).notNull(),
   depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }),
-  electricityRate: numeric("electricity_rate", { precision: 8, scale: 2 }),
-  waterRate: numeric("water_rate", { precision: 8, scale: 2 }),
   status: roomStatusEnum("status").default("Available").notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true).notNull(),
@@ -219,22 +209,25 @@ export const rooms = pgTable("rooms", {
 export const bookings = pgTable("bookings", {
   id: uuid("id").defaultRandom().primaryKey(),
   bookingCode: varchar("booking_code", { length: 30 }).notNull().unique(),
+  cancelledById: uuid("cancelled_by_id").references(() => users.id, { onDelete: "cascade" }),
   customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
   bookingDate: date("booking_date").notNull(),
-  expectedCheckIn: date("expected_check_in").notNull(),
-  bookingFee: numeric("booking_fee", { precision: 12, scale: 2 }),
+  depositAmount: numeric("deposit_amount", { precision: 10, scale: 2 }).default("0.00"),
+  totalAmount: numeric("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: bookingStatusEnum("status").default("Pending").notNull(),
-  note: text("note"),
+  cancelReason: text("cancel_reason"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }).defaultNow().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 }, (table) => [
   index("bookings_customer_idx").on(table.customerUserId),
   index("bookings_staff_idx").on(table.staffUserId),
+  index("bookings_cancelled_by_id_idx").on(table.cancelledById),
   index("bookings_room_idx").on(table.roomId),
   index("bookings_status_idx").on(table.status),
-]);
+]); 
 
 // ສັນຍາເຊົ່າ - Rental Contract
 export const contracts = pgTable("contracts", {
@@ -257,8 +250,9 @@ export const contracts = pgTable("contracts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
 }, (table) => [
-  index("contracts_customer_idx").on(table.customerUserId),
-  index("contracts_staff_idx").on(table.staffUserId),
+  index("contracts_customer_user_idx").on(table.customerUserId),
+  index("contracts_staff_user_idx").on(table.staffUserId),
+  index("contracts_booking_idx").on(table.bookingId),
   index("contracts_room_idx").on(table.roomId),
   index("contracts_status_idx").on(table.status),
 ]);
@@ -270,10 +264,7 @@ export const checkIns = pgTable("check_ins", {
   customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
-  checkInDate: timestamp("check_in_date", { withTimezone: true }).notNull(),
-  electricityMeterIn: numeric("electricity_meter_in", { precision: 10, scale: 2 }),
-  waterMeterIn: numeric("water_meter_in", { precision: 10, scale: 2 }),
-  keyReceived: boolean("key_received").default(true).notNull(),
+  checkInDate: timestamp("check_in_date", { withTimezone: true }).defaultNow().notNull(),
   roomConditionNote: text("room_condition_note"),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -291,12 +282,7 @@ export const checkOuts = pgTable("check_outs", {
   customerUserId: uuid("customer_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
-  checkOutDate: timestamp("check_out_date", { withTimezone: true }).notNull(),
-  electricityMeterOut: numeric("electricity_meter_out", { precision: 10, scale: 2 }),
-  waterMeterOut: numeric("water_meter_out", { precision: 10, scale: 2 }),
-  keyReturned: boolean("key_returned").default(true).notNull(),
-  damageDeduction: numeric("damage_deduction", { precision: 12, scale: 2 }).default("0"),
-  depositRefund: numeric("deposit_refund", { precision: 12, scale: 2 }),
+  checkOutDate: timestamp("check_out_date", { withTimezone: true }).defaultNow().notNull(),
   roomConditionNote: text("room_condition_note"),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -315,7 +301,7 @@ export const roomTransfers = pgTable("room_transfers", {
   fromRoomId: uuid("from_room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   toRoomId: uuid("to_room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
-  transferDate: date("transfer_date").notNull(),
+  transferDate: date("transfer_date").defaultNow().notNull(),
   reason: text("reason"),
   priceDifference: numeric("price_difference", { precision: 12, scale: 2 }),
   note: text("note"),
@@ -339,7 +325,7 @@ export const payments = pgTable("payments", {
   roomId: uuid("room_id").references(() => rooms.id, { onDelete: "cascade" }).notNull(),
   staffUserId: uuid("staff_user_id").references(() => users.id, { onDelete: "set null" }),
   paymentType: paymentTypeEnum("payment_type").notNull(),
-  paymentDate: date("payment_date").notNull(),
+  paymentDate: date("payment_date").defaultNow().notNull(),
   dueDate: date("due_date"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).default("0"),
@@ -394,6 +380,26 @@ export const utilityBills = pgTable("utility_bills", {
   index("utility_bills_status_idx").on(table.paymentStatus),
   // ໜຶ່ງຫ້ອງ ໜຶ່ງເດືອນ ມີໃບບິນດຽວ
   unique("utility_bills_contract_month_unique").on(table.contractId, table.billingMonth),
+]);
+
+export const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceCode: varchar("invoice_code", { length: 30 }).notNull().unique(),
+  contractId: uuid("contract_id").references(() => contracts.id, { onDelete: "cascade" }).notNull(),
+  customerId: uuid("customer_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  staffId: uuid("staff_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
+  invoiceDate: date("invoice_date").defaultNow().notNull(),
+  dueDate: date("due_date").notNull(),
+  paymentStatus: paymentStatusEnum("payment_status").default("Unpaid").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull().$onUpdateFn(() => new Date()),
+}, (table) => [
+  index("invoices_contract_idx").on(table.contractId),
+  index("invoices_customer_idx").on(table.customerId),
+  index("invoices_staff_idx").on(table.staffId),
+  index("invoices_status_idx").on(table.paymentStatus),
 ]);
 
 // =========================================================

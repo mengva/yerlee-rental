@@ -2,13 +2,13 @@ import { TRPCError } from "@trpc/server";
 import { ErrorHandler } from "@/server/packages/utils/handleError";
 import { ZodValidationSendOTPToEmail, ZodValidationServerResetPassword, ZodValidationSignIn, ZodValidationSignInOTP } from "@/server/packages/validations";
 import { MyContext } from "@/server/server/trpc/context";
-import db from "@/server/config/db";
 import { eq } from "drizzle-orm";
 import { redis } from "@/server/lib/redis";
 import { MailServices } from "@/server/lib/mail";
 import { UserRoleDto } from "@/server/packages/types";
 import { HandlerSuccess, Helper } from "@/server/utils";
 import { userCredentials, users } from "../../entities";
+import db from "@/server/config/db";
 
 interface SignInResponseDto {
     token: string;
@@ -212,35 +212,31 @@ export class tRPCAuthServices {
                 });
             }
 
-            return await db.transaction(async (tx) => {
+            // 5. Update the latest userAgent in the database
+            // This ensures the DB stays synced with the current device
+            await db.update(users)
+                .set({ userAgent: userAgent })
+                .where(eq(users.id, userInfo.id));
 
-                // 5. Update the latest userAgent in the database
-                // This ensures the DB stays synced with the current device
-                await tx.update(users)
-                    .set({ userAgent: userAgent })
-                    .where(eq(users.id, userInfo.id));
+            // 6. Prepare JWT Payload
+            const userPayload = {
+                userId: userInfo.id,
+                role: userInfo.role as UserRoleDto,
+                userAgent: userAgent,
+                exp: Helper.tokenExpriresIn, // Token expires in 30 days
+            };
 
-                // 6. Prepare JWT Payload
-                const userPayload = {
-                    userId: userInfo.id,
-                    role: userInfo.role as UserRoleDto,
-                    userAgent: userAgent,
-                    exp: Helper.tokenExpriresIn, // Token expires in 30 days
-                };
+            // 7. Generate and set access token in cookies
+            const token = await Helper.generateToken(userPayload);
 
-                // 7. Generate and set access token in cookies
-                const token = await Helper.generateToken(userPayload);
+            await redis.del(`sign_in_otp:${emailFromRedis as string}`); // Clear OTP from Redis after successful login
+            await redis.del(`reset_email_sign_in:${tokenFromCookie}`);
+            ctx.setCookie("reset_token_sign_in", "", { maxAge: 0 }); // Clear the OTP session cookie
 
-                await redis.del(`sign_in_otp:${emailFromRedis as string}`); // Clear OTP from Redis after successful login
-                await redis.del(`reset_email_sign_in:${tokenFromCookie}`);
-                ctx.setCookie("reset_token_sign_in", "", { maxAge: 0 }); // Clear the OTP session cookie
-
-                return {
-                    token,
-                    role: userInfo.role as UserRoleDto,
-                }
-
-            });
+            return {
+                token,
+                role: userInfo.role as UserRoleDto,
+            };
 
         } catch (error) {
             throw ErrorHandler.getErrorMessage(error);
@@ -288,7 +284,7 @@ export class tRPCAuthServices {
                 ),
             });
 
-            // Security Tip: Don't reveal if email exists or 
+            // Security Tip: Don't reveal if email exists or not
             // Just say "If an account exists, an email has been sent"
             if (!user) {
                 throw new TRPCError({
@@ -368,21 +364,28 @@ export class tRPCAuthServices {
             // 5. Hash the new password before storing it
             const hashedPassword = await Helper.bcryptHash(password);
 
-            return await db.transaction(async (tx) => {
-                // 6. Update the user's password in the database
-                await tx.update(userCredentials)
-                    .set({ passwordHash: hashedPassword })
-                    .where(eq(userCredentials.userId, ctx.userInfo?.userId));
+            const userId = ctx.userInfo?.userId || null;
 
-                // 7. Cleanup: Delete session and OTP data from Redis to prevent reuse
-                await redis.del(`reset_password:${email as string}`);
-                await redis.del(`reset_session:${resetToken}`);
+            if (!userId) {
+                throw new TRPCError({
+                    code: "UNAUTHORIZED",
+                    message: "User not authenticated"
+                });
+            }
 
-                // 8. Clear the secure reset cookie from the client's browser
-                ctx.setCookie("reset_token", "", { maxAge: 0 });
+            // 6. Update the user's password in the database
+            await db.update(userCredentials)
+                .set({ passwordHash: hashedPassword })
+                .where(eq(userCredentials.userId, userId));
 
-                return HandlerSuccess.success("Password has been reset successfully.");
-            });
+            // 7. Cleanup: Delete session and OTP data from Redis to prevent reuse
+            await redis.del(`reset_password:${email as string}`);
+            await redis.del(`reset_session:${resetToken}`);
+
+            // 8. Clear the secure reset cookie from the client's browser
+            ctx.setCookie("reset_token", "", { maxAge: 0 });
+
+            return HandlerSuccess.success("Password has been reset successfully.");
 
         } catch (error) {
             throw ErrorHandler.getErrorMessage(error);
