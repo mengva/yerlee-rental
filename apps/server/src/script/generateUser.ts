@@ -48,7 +48,7 @@ export const generateUser = async () => {
             gender: validationUserInfo.gender,
             birthDay: validationUserInfo.birthDay,
             phoneNumber: validationUserInfo.phoneNumber,
-            role: "owner",
+            role: "Owner",
         }).returning();
 
         if(!newUser) {
@@ -64,7 +64,7 @@ export const generateUser = async () => {
         console.log("User generated successfully.");
 
         // You can also add logic here to generate an access token for the new user if needed
-        // const token = await Helper.generateToken({ userId: newUserId, role: "owner" });
+        // const token = await Helper.generateToken({ userId: newUserId, role: "Owner" });
         // console.log("Generated token for new user:", token);
 
         // logic to auto signup users
