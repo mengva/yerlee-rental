@@ -3,8 +3,8 @@ import db from "../config/db";
 import { UserRoleDto } from "@/server/packages/types/constants/variables";
 import { HandlerSuccess, Helper } from "../utils";
 import { Context as HonoContext } from "hono";
-import { customerTokenName, ownerTokenName, staffTokenName } from "@/server/packages/utils";
 import { getCookie, setCookie } from "hono/cookie";
+import { tokenName } from "@/server/packages/utils";
 
 export class RefreshTokenMiddleware {
 
@@ -62,10 +62,7 @@ export class RefreshTokenMiddleware {
 
     public static async refreshUserToken(ctx: HonoContext) {
         // ... (Keep the role and cookie logic same as before) ...
-        const staffToken = getCookie(ctx, staffTokenName);
-        const customerToken = getCookie(ctx, customerTokenName);
-        const ownerToken = getCookie(ctx, ownerTokenName);
-        const oldToken = staffToken || customerToken || ownerToken;
+        const oldToken = getCookie(ctx, tokenName);
         const currentUA = ctx.req.header("user-agent") || "";
 
         if (!oldToken) {
@@ -81,7 +78,15 @@ export class RefreshTokenMiddleware {
 
             // Only set a new cookie if the action is "REFRESHED"
             if (result.action === "REFRESHED" && result.role) {
-                const cookieName = Helper.getCookieName(result.role as UserRoleDto);
+                const cookieName = getCookie(ctx, tokenName);
+
+                if(!cookieName) {
+                    throw new TRPCError({
+                        code: "INTERNAL_SERVER_ERROR",
+                        message: "Token name not found in cookies"
+                    });
+                }
+
                 setCookie(ctx, cookieName, result.token, Helper.cookieOption);
                 return HandlerSuccess.success("Token has been extended for another period");
             }

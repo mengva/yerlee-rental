@@ -1,9 +1,7 @@
 import * as bcrypt from "bcryptjs"
-import * as nodemailer from "nodemailer";
 import { env } from "../config/env";
 import * as jwt from "jsonwebtoken";
 import { UserRoleDto } from "@/server/packages/types/constants/variables";
-import { customerTokenName, ownerTokenName, staffTokenName } from "@/server/packages/utils/constants/variables";
 // import {jwt, decode, sign, verify} from "hono/jwt"
 
 export type SignDto = "HS256" | "HS384" | "HS512" | "RS256" | "RS384" | "RS512" | "ES256" | "ES384" | "ES512" | "PS256" | "PS384" | "PS512";
@@ -44,10 +42,6 @@ export class Helper {
         domain: 'localhost',
         maxAge: 60 * 60 * 24 * 30, // 30d 
         path: '/',
-    }
-
-    public static getCookieName(role: UserRoleDto): string {
-        return role === "owner" ? ownerTokenName : role === "staff" ? staffTokenName : customerTokenName;
     }
 
     public static async generateToken(payload: PayloadDto): Promise<string> {
