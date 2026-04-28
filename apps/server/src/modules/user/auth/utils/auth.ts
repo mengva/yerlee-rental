@@ -5,19 +5,16 @@ import { MyContext } from "@/server/server/trpc/context";
 import { eq } from "drizzle-orm";
 import { redis } from "@/server/lib/redis";
 import { MailServices } from "@/server/lib/mail";
-import { UserRoleDto } from "@/server/packages/types";
+import { ServerResponseDto, UserRoleDto } from "@/server/packages/types";
 import { HandlerSuccess, Helper } from "@/server/utils";
 import { userCredentials, users } from "../../entities";
 import db from "@/server/config/db";
+import { tokenName } from "@/server/packages/utils";
 
-interface SignInResponseDto {
-    token: string;
-    role: UserRoleDto;
-}
 
 export class tRPCAuthServices {
 
-    public static async signIn(ctx: MyContext): Promise<SignInResponseDto> {
+    public static async signIn(ctx: MyContext): Promise<ServerResponseDto> {
         try {
             const info: ZodValidationSignIn = ctx.bodyInfo;
             const userAgent = ctx.userAgent || null;
@@ -79,10 +76,9 @@ export class tRPCAuthServices {
             // 7. Generate and set access token in cookies
             const token = await Helper.generateToken(userPayload);
 
-            return {
-                token,
-                role: userInfo.role as UserRoleDto,
-            }
+            ctx.setCookie(tokenName, token, Helper.cookieOption);
+
+            return HandlerSuccess.success("Sign in successful");
         } catch (error) {
             throw ErrorHandler.getErrorMessage(error);
         }
@@ -166,7 +162,7 @@ export class tRPCAuthServices {
         }
     }
 
-    public static async signInOTP(ctx: MyContext): Promise<SignInResponseDto> {
+    public static async signInOTP(ctx: MyContext): Promise<ServerResponseDto> {
         try {
             const info: ZodValidationSignInOTP = ctx.bodyInfo;
             const userAgent = ctx.userAgent || null;
@@ -233,10 +229,9 @@ export class tRPCAuthServices {
             await redis.del(`reset_email_sign_in:${tokenFromCookie}`);
             ctx.setCookie("reset_token_sign_in", "", { maxAge: 0 }); // Clear the OTP session cookie
 
-            return {
-                token,
-                role: userInfo.role as UserRoleDto,
-            };
+            ctx.setCookie(tokenName, token, Helper.cookieOption);
+
+            return HandlerSuccess.success("OTP Sign in successful");
 
         } catch (error) {
             throw ErrorHandler.getErrorMessage(error);
